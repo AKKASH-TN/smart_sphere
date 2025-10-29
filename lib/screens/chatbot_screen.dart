@@ -4,7 +4,9 @@ import '../services/ai_service.dart';
 import '../models/chat_models.dart';
 
 class ChatbotScreen extends StatefulWidget {
-  const ChatbotScreen({super.key});
+  final String? initialMessage;
+  
+  const ChatbotScreen({super.key, this.initialMessage});
 
   @override
   State<ChatbotScreen> createState() => _ChatbotScreenState();
@@ -35,12 +37,20 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     
     // Add welcome message
     _addWelcomeMessage();
+    
+    // If there's an initial message from voice command, send it
+    if (widget.initialMessage != null && widget.initialMessage!.isNotEmpty) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _messageController.text = widget.initialMessage!;
+        _sendMessage();
+      });
+    }
   }
 
   void _addWelcomeMessage() {
     setState(() {
       _messages.add(ChatMessage(
-        text: "Hello! I'm SmartSphere AI, your intelligent assistant for smart home automation. I can help you with:\n\n• Device control and troubleshooting\n• Energy efficiency tips\n• Automation setup\n• Voice control guidance\n• Security recommendations\n\nHow can I assist you today?",
+        text: "Hey there! I'm your SmartSphere AI assistant. I'm here to help you get the most out of your smart home.\n\nI can help with things like controlling your devices, saving energy, setting up automation, troubleshooting issues, and making your home smarter.\n\nWhat would you like to know?",
         isUser: false,
         timestamp: DateTime.now(),
       ));
@@ -93,7 +103,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     } catch (e) {
       setState(() {
         _messages.add(ChatMessage(
-          text: "I apologize, but I'm having trouble connecting right now. Please check your internet connection and try again.",
+          text: "Oops, I'm having trouble connecting right now. Could you check your internet connection and try asking again?",
           isUser: false,
           timestamp: DateTime.now(),
         ));

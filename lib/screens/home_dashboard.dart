@@ -3,6 +3,8 @@ import 'package:fl_chart/fl_chart.dart';
 import '../widgets/device_control_card.dart';
 import '../widgets/smart_sphere_logo.dart';
 import '../widgets/chatbot_fab.dart';
+import '../services/speech_service.dart';
+import '../services/voice_command_processor.dart';
 import 'devices_screen.dart';
 import 'energy_analytics_screen.dart';
 import 'chatbot_screen.dart';
@@ -22,36 +24,52 @@ class _HomeDashboardState extends State<HomeDashboard>
   TimeOfDay selectedTime = TimeOfDay.now();
   List<ScheduledTask> scheduledTasks = [];
   int _currentIndex = 0;
+  Map<String, dynamic>? _sensorData;
+  final SpeechService _speechService = SpeechService();
+  final VoiceCommandProcessor _commandProcessor = VoiceCommandProcessor();
+  bool _isListening = false;
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _logoController;
+  late AnimationController _headerController;
+  late AnimationController _pulseController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _logoAnimation;
+  late Animation<double> _headerAnimation;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
     _slideController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
     _logoController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
+    _headerController = AnimationController(
+      duration: const Duration(milliseconds: 1800),
+      vsync: this,
+    );
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
     );
 
     _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
           CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
         );
 
@@ -59,9 +77,18 @@ class _HomeDashboardState extends State<HomeDashboard>
       CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
     );
 
+    _headerAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _headerController, curve: Curves.easeOutQuart),
+    );
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
     _fadeController.forward();
     _slideController.forward();
     _logoController.forward();
+    _headerController.forward();
   }
 
   @override
@@ -69,61 +96,55 @@ class _HomeDashboardState extends State<HomeDashboard>
     _fadeController.dispose();
     _slideController.dispose();
     _logoController.dispose();
+    _headerController.dispose();
+    _pulseController.dispose();
+    _speechService.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Row(
-          children: [
-            ScaleTransition(
-              scale: _logoAnimation,
-              child: const SmartSphereLogo(size: 28.0),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'SmartSphere',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
+        toolbarHeight: 0,
       ),
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: SlideTransition(
           position: _slideAnimation,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildWelcomeSection(),
-                const SizedBox(height: 24),
-                _buildDeviceControls(),
-                const SizedBox(height: 24),
-                _buildEnergyUsageSection(),
-                const SizedBox(height: 24),
-                _buildSchedulingSection(),
-                const SizedBox(height: 24),
-                _buildQuickStats(),
-                const SizedBox(height: 24),
-                _buildRecommendationsSection(),
-                const SizedBox(height: 24),
-                _buildAIAssistantSection(),
-                const SizedBox(height: 24),
-                _buildNotificationsSection(),
-                const SizedBox(
-                  height: 100,
-                ), // Extra space for floating action button
+                _buildAnimatedHeader(),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 24),
+                      _buildDeviceControls(),
+                      const SizedBox(height: 24),
+                      _buildEnergyUsageSection(),
+                      const SizedBox(height: 24),
+                      _buildSchedulingSection(),
+                      const SizedBox(height: 24),
+                      _buildQuickStats(),
+                      const SizedBox(height: 24),
+                      _buildRecommendationsSection(),
+                      const SizedBox(height: 24),
+                      _buildAIAssistantSection(),
+                      const SizedBox(height: 24),
+                      _buildNotificationsSection(),
+                      const SizedBox(height: 100),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -154,14 +175,66 @@ class _HomeDashboardState extends State<HomeDashboard>
             case 1:
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const DevicesScreen()),
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      const DevicesScreen(),
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) {
+                    const begin = Offset(1.0, 0.0);
+                    const end = Offset.zero;
+                    const curve = Curves.easeInOutCubic;
+                    var tween = Tween(begin: begin, end: end)
+                        .chain(CurveTween(curve: curve));
+                    var offsetAnimation = animation.drive(tween);
+                    var fadeAnimation = Tween<double>(begin: 0.0, end: 1.0)
+                        .animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeIn,
+                      ),
+                    );
+                    return FadeTransition(
+                      opacity: fadeAnimation,
+                      child: SlideTransition(
+                        position: offsetAnimation,
+                        child: child,
+                      ),
+                    );
+                  },
+                  transitionDuration: const Duration(milliseconds: 400),
+                ),
               );
               break;
             case 2:
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const EnergyAnalyticsScreen(),
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      const EnergyAnalyticsScreen(),
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) {
+                    const begin = Offset(1.0, 0.0);
+                    const end = Offset.zero;
+                    const curve = Curves.easeInOutCubic;
+                    var tween = Tween(begin: begin, end: end)
+                        .chain(CurveTween(curve: curve));
+                    var offsetAnimation = animation.drive(tween);
+                    var fadeAnimation = Tween<double>(begin: 0.0, end: 1.0)
+                        .animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeIn,
+                      ),
+                    );
+                    return FadeTransition(
+                      opacity: fadeAnimation,
+                      child: SlideTransition(
+                        position: offsetAnimation,
+                        child: child,
+                      ),
+                    );
+                  },
+                  transitionDuration: const Duration(milliseconds: 400),
                 ),
               );
               break;
@@ -182,59 +255,153 @@ class _HomeDashboardState extends State<HomeDashboard>
     );
   }
 
-  Widget _buildWelcomeSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const SmartSphereLogo(size: 24.0, color: Colors.white),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Welcome to SmartSphere!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  'Managing ${scheduledTasks.length} scheduled tasks • All systems connected',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 14,
-                  ),
-                ),
+  Widget _buildAnimatedHeader() {
+    return AnimatedBuilder(
+      animation: _headerAnimation,
+      builder: (context, child) {
+        // Clamp the opacity value between 0.0 and 1.0
+        final pulseOpacity = (0.8 + (_pulseAnimation.value * 0.1)).clamp(0.0, 1.0);
+        return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF6A11CB).withOpacity(pulseOpacity),
+                Color(0xFF2575FC).withOpacity(pulseOpacity),
               ],
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0xFF2575FC).withOpacity(0.3),
+                blurRadius: 20,
+                spreadRadius: 5,
+              ),
+            ],
           ),
-        ],
-      ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      ScaleTransition(
+                        scale: _logoAnimation,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const SmartSphereLogo(size: 32.0),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SmartSphere',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 1.2,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Your Smart Home Hub',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.9),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.circle, color: Colors.greenAccent, size: 12),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Online',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  FadeTransition(
+                    opacity: _headerAnimation,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${DateTime.now().hour < 12 ? 'Good Morning' : DateTime.now().hour < 18 ? 'Good Afternoon' : 'Good Evening'} Ash',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.white.withOpacity(0.95),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.thermostat, color: Colors.white70, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${(_sensorData?['temperature'] ?? 22.0).toStringAsFixed(1)}°C',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Icon(Icons.water_drop, color: Colors.white70, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${(_sensorData?['humidity'] ?? 45.0).toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -254,30 +421,44 @@ class _HomeDashboardState extends State<HomeDashboard>
         Row(
           children: [
             Expanded(
-              child: DeviceControlCard(
-                deviceName: 'Fan',
-                icon: Icons.air,
-                status: fanStatus,
-                subtitle: fanStatus ? 'Speed: High' : 'Disconnected',
-                onToggle: (value) {
-                  setState(() {
-                    fanStatus = value;
-                  });
-                },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: AnimatedScale(
+                  scale: 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: DeviceControlCard(
+                    deviceName: 'Fan',
+                    icon: Icons.air,
+                    status: fanStatus,
+                    subtitle: fanStatus ? 'Speed: High' : 'Disconnected',
+                    onToggle: (value) {
+                      setState(() {
+                        fanStatus = value;
+                      });
+                    },
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: DeviceControlCard(
-                deviceName: 'Light',
-                icon: Icons.lightbulb_outline,
-                status: lightStatus,
-                subtitle: lightStatus ? 'Brightness: 80%' : 'Disconnected',
-                onToggle: (value) {
-                  setState(() {
-                    lightStatus = value;
-                  });
-                },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: AnimatedScale(
+                  scale: 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: DeviceControlCard(
+                    deviceName: 'Light',
+                    icon: Icons.lightbulb_outline,
+                    status: lightStatus,
+                    subtitle: lightStatus ? 'Brightness: 80%' : 'Disconnected',
+                    onToggle: (value) {
+                      setState(() {
+                        lightStatus = value;
+                      });
+                    },
+                  ),
+                ),
               ),
             ),
           ],
@@ -287,19 +468,22 @@ class _HomeDashboardState extends State<HomeDashboard>
   }
 
   Widget _buildEnergyUsageSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F2E),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.basic,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1F2E),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -337,25 +521,56 @@ class _HomeDashboardState extends State<HomeDashboard>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const EnergyAnalyticsScreen(),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          PageRouteBuilder(
+                            pageBuilder:
+                                (context, animation, secondaryAnimation) =>
+                                    const EnergyAnalyticsScreen(),
+                            transitionsBuilder: (context, animation,
+                                secondaryAnimation, child) {
+                              const begin = Offset(1.0, 0.0);
+                              const end = Offset.zero;
+                              const curve = Curves.easeInOutCubic;
+                              var tween = Tween(begin: begin, end: end)
+                                  .chain(CurveTween(curve: curve));
+                              var offsetAnimation = animation.drive(tween);
+                              var fadeAnimation =
+                                  Tween<double>(begin: 0.0, end: 1.0).animate(
+                                CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeIn,
+                                ),
+                              );
+                              return FadeTransition(
+                                opacity: fadeAnimation,
+                                child: SlideTransition(
+                                  position: offsetAnimation,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            transitionDuration:
+                                const Duration(milliseconds: 400),
+                          ),
+                        );
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.arrow_forward,
-                        color: Colors.blue,
-                        size: 16,
+                        child: const Icon(
+                          Icons.arrow_forward,
+                          color: Colors.blue,
+                          size: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -494,23 +709,27 @@ class _HomeDashboardState extends State<HomeDashboard>
           ),
         ],
       ),
+    ),
     );
   }
 
   Widget _buildSchedulingSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F2E),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.basic,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1F2E),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -711,6 +930,7 @@ class _HomeDashboardState extends State<HomeDashboard>
             ),
         ],
       ),
+    ),
     );
   }
 
@@ -753,56 +973,64 @@ class _HomeDashboardState extends State<HomeDashboard>
     IconData icon,
     Color color,
   ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F2E),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1F2E),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(color: Colors.grey.withOpacity(0.8), fontSize: 12),
-            textAlign: TextAlign.center,
-          ),
-        ],
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style:
+                  TextStyle(color: Colors.grey.withOpacity(0.8), fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildRecommendationsSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F2E),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.basic,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1F2E),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -862,24 +1090,28 @@ class _HomeDashboardState extends State<HomeDashboard>
           ),
         ],
       ),
+    ),
     );
   }
 
   Widget _buildAIAssistantSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A1F2E), Color(0xFF2A2F3E)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF4A90E2).withOpacity(0.3),
-          width: 1,
-        ),
-        boxShadow: [
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A1F2E), Color(0xFF2A2F3E)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF4A90E2).withOpacity(0.3),
+            width: 1,
+          ),
+          boxShadow: [
           BoxShadow(
             color: const Color(0xFF4A90E2).withOpacity(0.1),
             blurRadius: 10,
@@ -1031,6 +1263,7 @@ class _HomeDashboardState extends State<HomeDashboard>
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -1079,19 +1312,22 @@ class _HomeDashboardState extends State<HomeDashboard>
       },
     ];
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F2E),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.basic,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1F2E),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1124,6 +1360,7 @@ class _HomeDashboardState extends State<HomeDashboard>
           ...alerts.map((alert) => _buildAlertItem(alert)),
         ],
       ),
+    ),
     );
   }
 
@@ -1195,90 +1432,260 @@ class _HomeDashboardState extends State<HomeDashboard>
   void _showVoiceCommandDialog() {
     showDialog(
       context: context,
-      barrierDismissible: true,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1F2E),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.5),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.blue.withOpacity(0.3),
-                      width: 2,
-                    ),
-                  ),
-                  child: const Icon(Icons.mic, color: Colors.blue, size: 40),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Listening for voice command...',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Say something like "Turn on the lights"',
-                  style: TextStyle(
-                    color: Colors.grey.withOpacity(0.7),
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: TextButton.styleFrom(foregroundColor: Colors.grey),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        // Show a mock response
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Voice command processed!'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Done'),
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1F2E),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: _isListening
+                            ? Colors.red.withOpacity(0.2)
+                            : Colors.blue.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _isListening
+                              ? Colors.red.withOpacity(0.5)
+                              : Colors.blue.withOpacity(0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.mic,
+                        color: _isListening ? Colors.red : Colors.blue,
+                        size: 40,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      _isListening
+                          ? 'Listening...'
+                          : 'Tap to start voice command',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Say: "Turn on light", "Open chatbot", "Check status"',
+                      style: TextStyle(
+                        color: Colors.grey.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        TextButton(
+                          onPressed: () async {
+                            if (_isListening) {
+                              await _speechService.cancelRecording();
+                              setDialogState(() {
+                                _isListening = false;
+                              });
+                            }
+                            Navigator.of(dialogContext).pop();
+                          },
+                          style:
+                              TextButton.styleFrom(foregroundColor: Colors.grey),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            if (!_isListening) {
+                              // Start recording
+                              final started =
+                                  await _speechService.startRecording();
+                              if (started) {
+                                setDialogState(() {
+                                  _isListening = true;
+                                });
+                              } else {
+                                Navigator.of(dialogContext).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Microphone permission denied or not available'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            } else {
+                              // Stop recording and process
+                              final transcript = await _speechService
+                                  .stopRecordingAndTranscribe();
+                              setDialogState(() {
+                                _isListening = false;
+                              });
+
+                              Navigator.of(dialogContext).pop();
+
+                              if (transcript != null && transcript.isNotEmpty) {
+                                _processVoiceCommand(transcript);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Could not understand. Please try again.'),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                _isListening ? Colors.red : Colors.blue,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Text(_isListening ? 'Stop' : 'Start'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
+    );
+  }
+
+  void _processVoiceCommand(String transcript) {
+    final command = _commandProcessor.processCommand(transcript);
+
+    if (command == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not process command: "$transcript"'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Show confirmation
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(command.getConfirmationMessage()),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    // Execute the command
+    setState(() {
+      switch (command.action) {
+        case CommandAction.turnOnLight:
+          lightStatus = true;
+          break;
+        case CommandAction.turnOffLight:
+          lightStatus = false;
+          break;
+        case CommandAction.turnOnFan:
+          fanStatus = true;
+          break;
+        case CommandAction.turnOffFan:
+          fanStatus = false;
+          break;
+        case CommandAction.openChatbot:
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatbotScreen(initialMessage: command.query),
+            ),
+          );
+          break;
+        case CommandAction.openDevices:
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const DevicesScreen()),
+          );
+          break;
+        case CommandAction.openEnergy:
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const EnergyAnalyticsScreen()),
+          );
+          break;
+        case CommandAction.openHome:
+          // Already on home
+          break;
+        case CommandAction.checkStatus:
+          _showStatusDialog();
+          break;
+      }
+    });
+  }
+
+  void _showStatusDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1F2E),
+        title: const Text('Device Status',
+            style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.lightbulb,
+                    color: lightStatus ? Colors.yellow : Colors.grey),
+                const SizedBox(width: 12),
+                Text(
+                  'Light: ${lightStatus ? "ON" : "OFF"}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.air, color: fanStatus ? Colors.blue : Colors.grey),
+                const SizedBox(width: 12),
+                Text(
+                  'Fan: ${fanStatus ? "ON" : "OFF"}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -17,42 +17,66 @@ class GeminiService {
       final content = [Content.text(prompt)];
       final response = await _model.generateContent(content);
 
-      return response.text ??
+      // Clean up the response to remove markdown formatting
+      String cleanedResponse = response.text ??
           'Sorry, I couldn\'t generate a response. Please try again.';
+      
+      // Remove markdown formatting
+      cleanedResponse = _cleanMarkdown(cleanedResponse);
+
+      return cleanedResponse;
     } catch (e) {
       return 'Sorry, I encountered an error: ${e.toString()}. Please check your internet connection and try again.';
     }
   }
 
+  String _cleanMarkdown(String text) {
+    // Remove bold markers (**)
+    text = text.replaceAll(RegExp(r'\*\*'), '');
+    // Remove italic markers (*)
+    text = text.replaceAll(RegExp(r'(?<!\*)\*(?!\*)'), '');
+    // Remove code block markers (```)
+    text = text.replaceAll(RegExp(r'```[\w]*\n?'), '');
+    // Remove inline code markers (`)
+    text = text.replaceAll('`', '');
+    // Remove header markers (#)
+    text = text.replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '');
+    // Clean up multiple spaces
+    text = text.replaceAll(RegExp(r'\s+'), ' ');
+    // Clean up multiple newlines (keep max 2)
+    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    
+    return text.trim();
+  }
+
   String _buildSmartHomePrompt(String userMessage, String? context) {
     return '''
-You are SmartSphere AI, an intelligent assistant for a smart home automation app called SmartSphere. 
-Your role is to help users with:
+You are SmartSphere AI, a friendly and helpful smart home assistant. You're talking to Ash, who uses the SmartSphere app to control their home.
 
-1. Smart home device control and automation
-2. Energy efficiency and analytics
-3. Voice control features
-4. Scheduling and automation setup
-5. Device troubleshooting
-6. Smart home best practices
-7. Energy saving tips
-8. Security recommendations for smart homes
+IMPORTANT INSTRUCTIONS:
+- Talk like a friendly human assistant, not a robot
+- Use natural, conversational language
+- Don't use markdown formatting (no **, *, #, `, etc.)
+- Keep responses concise and to the point (2-4 sentences max for simple questions)
+- Use simple bullet points with • if listing items, but avoid other formatting
+- Be warm, personable, and encouraging
+- Address the user directly ("you" and "your")
+- Show enthusiasm when appropriate
+- If something is good news, express positivity naturally
 
-Context about the app:
-- SmartSphere is a comprehensive smart home automation platform
-- Users can control lights, fans, and other smart devices
-- The app includes energy analytics and consumption tracking
-- Voice control capabilities are available
-- Users can schedule automated tasks
-- The app provides a modern, intuitive dashboard
+Your expertise covers:
+• Smart device control and automation
+• Energy efficiency and saving tips
+• Voice control setup and usage
+• Scheduling and automation
+• Device troubleshooting
+• Home security recommendations
 
-${context != null ? 'Current app context: $context' : ''}
+${context != null ? 'Current situation: $context' : ''}
 
-User message: $userMessage
+User: $userMessage
 
-Please provide helpful, accurate, and concise responses related to smart home automation. If the user asks about something unrelated to smart homes, politely redirect them to smart home topics. Always be friendly and professional.
-
-Response:''';
+Respond naturally as if you're having a friendly conversation. No markdown formatting. Be helpful and conversational:''';
   }
 
   Future<String> getSmartHomeAdvice(String deviceType, String issue) async {
