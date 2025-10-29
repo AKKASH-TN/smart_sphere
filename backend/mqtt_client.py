@@ -32,17 +32,30 @@ class MQTTClient:
                 print(f"Invalid JSON payload received on topic {msg.topic}")
 
     def start(self):
-        self.client.connect(self.broker, self.port, 60)
-        self.client.loop_start()
+        try:
+            self.client.connect(self.broker, self.port, 60)
+            self.client.loop_start()
+            print(f"[MQTT] Connected to broker at {self.broker}:{self.port}")
+        except Exception as e:
+            print(f"[MQTT] Warning: Could not connect to MQTT broker at {self.broker}:{self.port}")
+            print(f"[MQTT] Running in simulation mode without MQTT broker")
+            print(f"[MQTT] Error: {e}")
 
     def stop(self):
-        self.client.loop_stop()
-        self.client.disconnect()
+        try:
+            self.client.loop_stop()
+            self.client.disconnect()
+        except:
+            pass
 
     def publish_device_state(self, device: str, state: str):
-        topic = f"home/{device}"
-        payload = json.dumps({"state": state})
-        self.client.publish(topic, payload)
+        try:
+            topic = f"home/{device}"
+            payload = json.dumps({"state": state})
+            self.client.publish(topic, payload)
+            print(f"[MQTT] Published: {topic} -> {state}")
+        except Exception as e:
+            print(f"[MQTT] Could not publish (broker not connected): {e}")
 
     async def simulate_energy_data(self, energy_callback: Callable):
         """Simulates periodic energy usage data"""
@@ -51,13 +64,17 @@ class MQTTClient:
             watts = random.uniform(100, 500)
             
             # Publish to MQTT
-            self.client.publish(
-                "home/energy",
-                json.dumps({
-                    "timestamp": datetime.now().isoformat(),
-                    "watts": watts
-                })
-            )
+            try:
+                self.client.publish(
+                    "home/energy",
+                    json.dumps({
+                        "timestamp": datetime.now().isoformat(),
+                        "watts": watts
+                    })
+                )
+            except Exception as e:
+                # Silently continue if MQTT is not connected
+                pass
             
             # Call the callback to log the data
             if energy_callback:

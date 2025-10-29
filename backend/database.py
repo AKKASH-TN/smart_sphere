@@ -26,15 +26,27 @@ class Database:
                     watts REAL NOT NULL
                 )
             ''')
+            
+            # Create sensor logs table
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS sensor_logs (
+                    id INTEGER PRIMARY KEY,
+                    timestamp DATETIME NOT NULL,
+                    temperature REAL,
+                    humidity REAL,
+                    motion INTEGER,
+                    door TEXT
+                )
+            ''')
 
             # Initialize default devices if not exists
-            await db.execute('SELECT COUNT(*) FROM devices')
-            count = await db.fetchone()
-            if count[0] == 0:
-                await db.executemany(
-                    'INSERT INTO devices (name, state) VALUES (?, ?)',
-                    [('fan', 'OFF'), ('light', 'OFF')]
-                )
+            async with db.execute('SELECT COUNT(*) FROM devices') as cursor:
+                count = await cursor.fetchone()
+                if count[0] == 0:
+                    await db.executemany(
+                        'INSERT INTO devices (name, state) VALUES (?, ?)',
+                        [('fan', 'OFF'), ('light', 'OFF')]
+                    )
             
             await db.commit()
 
@@ -65,6 +77,31 @@ class Database:
             db.row_factory = aiosqlite.Row
             async with db.execute(
                 'SELECT * FROM energy_logs ORDER BY timestamp DESC LIMIT ?',
+                (limit,)
+            ) as cursor:
+                return [dict(row) for row in await cursor.fetchall()]
+    
+    async def log_sensor_data(self, sensor_data: dict):
+        """Log sensor readings to database"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                'INSERT INTO sensor_logs (timestamp, temperature, humidity, motion, door) VALUES (?, ?, ?, ?, ?)',
+                (
+                    sensor_data['timestamp'],
+                    sensor_data['temperature'],
+                    sensor_data['humidity'],
+                    1 if sensor_data['motion'] else 0,
+                    sensor_data['door']
+                )
+            )
+            await db.commit()
+    
+    async def get_latest_sensor_logs(self, limit: int = 10):
+        """Get latest sensor readings"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                'SELECT * FROM sensor_logs ORDER BY timestamp DESC LIMIT ?',
                 (limit,)
             ) as cursor:
                 return [dict(row) for row in await cursor.fetchall()]
